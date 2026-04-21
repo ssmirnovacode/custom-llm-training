@@ -42,19 +42,7 @@ venv.bak/
 llms/
 llms.bak/
 
-# Added this to ignore models downloaded from HF
-model_cache/
 
-# Ignore Chroma vector database
-vector_db/
 
-# ignore gradio private files
-.gradio
-/.gradio
 
-# ignore diagnostics reports
-**/report.txt
-
-# ignore knowledge-base - will be anything
-knowledge-base
-
+saved
