@@ -66,10 +66,24 @@ def batch_generator(documents, y, vectorizer, batch_size=64):
         yield X_batch, y_batch
 
 
-def train_model(model, documents, y, vectorizer, loss_fn, optimizer, epochs=10):
+def train_model(
+    model,
+    documents,
+    y,
+    vectorizer,
+    loss_fn,
+    optimizer,
+    val_docs,
+    val_y,
+    epochs=10,
+    patience=3,
+):
+    best_val_loss = float("inf")
+    patience_counter = 0
+    best_model_state = None
+
     for epoch in range(epochs):
         model.train()
-
         last_loss = None
 
         for batch_X, batch_y in tqdm(batch_generator(documents, y, vectorizer)):
@@ -78,10 +92,38 @@ def train_model(model, documents, y, vectorizer, loss_fn, optimizer, epochs=10):
             loss = loss_fn(outputs, batch_y)
             loss.backward()
             optimizer.step()
-
             last_loss = loss.item()
 
-        print(f"Epoch [{epoch+1}/{epochs}], Train Loss: {last_loss:.3f}")
+        # Validation
+        model.eval()
+        with torch.no_grad():
+            val_X = vectorizer.transform(val_docs)
+            val_X = torch.FloatTensor(val_X.toarray())
+            val_y_tensor = torch.FloatTensor(val_y).unsqueeze(1)
+            val_loss = loss_fn(model(val_X), val_y_tensor).item()
+
+        print(
+            f"Epoch [{epoch+1}/{epochs}], Train Loss: {last_loss:.3f}, Val Loss: {val_loss:.3f}"
+        )
+
+        # Early stopping logic
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+            best_model_state = model.state_dict().copy()
+            print(f"  -> New best model (val_loss={val_loss:.3f})")
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print(f"Early stopping triggered after {epoch+1} epochs")
+                model.load_state_dict(best_model_state)
+                break
+
+    # Load best model
+    model.load_state_dict(best_model_state)
+    torch.save(model.state_dict(), "model_weights.pth")
+    torch.save(best_model_state, "best_model.pth")
+    return model
 
 
 def evaluate_model(model, val, vectorizer, loss_fn, sample_size=SIZE):
@@ -117,13 +159,27 @@ def main():
     train, val, test = load_dataset_from_hf()
     documents, y = prepare_documents(train)
 
+    val_documents = [item.summary for item in val]
+    val_y = np.array([float(item.price) for item in val])
+
     vectorizer = HashingVectorizer(n_features=SIZE, stop_words="english", binary=True)
 
     model = NeuralNetwork(input_size=SIZE)
     loss_fn = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    train_model(model, documents, y, vectorizer, loss_fn, optimizer)
+    train_model(
+        model,
+        documents,
+        y,
+        vectorizer,
+        loss_fn,
+        optimizer,
+        val_documents,
+        val_y,
+        epochs=10,
+        patience=3,
+    )
 
     evaluate_model(model, val, vectorizer, loss_fn)
 
