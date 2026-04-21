@@ -66,7 +66,7 @@ def batch_generator(documents, y, vectorizer, batch_size=64):
         yield X_batch, y_batch
 
 
-def train_model(model, documents, y, vectorizer, loss_fn, optimizer, epochs=2):
+def train_model(model, documents, y, vectorizer, loss_fn, optimizer, epochs=10):
     for epoch in range(epochs):
         model.train()
 
